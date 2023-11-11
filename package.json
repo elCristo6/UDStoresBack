@@ -20,5 +20,6 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": "backend UD-Electronics"
+  "description": "backend UD-Electronics",
+  "devDependencies": {}
 }

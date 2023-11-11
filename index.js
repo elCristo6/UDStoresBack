@@ -2,7 +2,7 @@
 
 const express = require('express');
 const bodyParser = require('body-parser');
-const connectDB = require('./config/Database');
+const connectDB = require('./config/database');
 const productRoutes = require('./routes/productRoute'); // Importa las rutas del producto
 const userRoute = require('./routes/userRoute'); // Importa las rutas del usuario
 const app = express();
@@ -23,7 +23,6 @@ connectDB();
 //  rutas del producto
 app.use('/api/products', productRoutes);
 
-//Rutasa de los usuarios
 
 app.use('/api/users', userRoute)
 
