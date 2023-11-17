@@ -2,21 +2,35 @@ const User = require('../models/userModel');
 
 exports.register = async (req, res) => {
     try {
+        // Verificar si el email o el teléfono ya están registrados
+        const existingUserByEmail = await User.findOne({ email: req.body.email });
+        if (existingUserByEmail) {
+            return res.status(409).send('El correo electrónico ya está registrado.');
+        }
+
+        const existingUserByPhone = await User.findOne({ phone: req.body.phone });
+        if (existingUserByPhone) {
+            return res.status(409).send('El número de teléfono ya está registrado.');
+        }
+
+        // Crear y guardar el nuevo usuario
         const newUser = new User({
             email: req.body.email,
             password: req.body.password,
-            name: req.body.name
-            // Otros campos
+            name: req.body.name,
+            phone: req.body.phone,
+            cc: req.body.cc,
+            detalles: req.body.detalles
+            // Otros campos, si los hay
         });
         await newUser.save();
         res.status(201).send('Usuario registrado con éxito.');
     } catch (err) {
-        if (err.code && err.code === 11000) {
-            return res.status(409).send('El correo electrónico ya está registrado.');
-        }
-        return res.status(500).send(err);
+        console.error(err); // Imprime el error completo en la consola del servidor
+        return res.status(500).send(err.message); // Envía un mensaje de error más detallado
     }
 };
+
 
 exports.authenticate = async (req, res) => {
     try {
@@ -36,6 +50,20 @@ exports.authenticate = async (req, res) => {
         });
     } catch (err) {
         res.status(500).send(err);
+    }
+};
+exports.findByPhone = async (req, res) => {
+    try {
+        const phone = req.params.phone;
+        const user = await User.findOne({ phone: phone });
+
+        if (!user) {
+            return res.status(404).send({ error: 'Usuario no encontrado.' });
+        }
+
+        res.status(200).json(user);
+    } catch (err) {
+        res.status(500).send({ error: 'Error al buscar el usuario.' });
     }
 };
 

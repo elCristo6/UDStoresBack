@@ -9,4 +9,5 @@ router.post('/register', userController.register);
 router.post('/login', userController.authenticate);  // He usado /login aquí, pero puedes usar /authenticate o cualquier otra ruta que prefieras.
 router.get('/', userController.getAllUsers);
 router.delete('/:email', userController.deleteByEmail);
+router.get('/:phone', userController.findByPhone);
 module.exports = router;

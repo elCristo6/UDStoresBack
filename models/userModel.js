@@ -6,29 +6,50 @@ const saltRounds = 10;
 const UserSchema = new mongoose.Schema({
     email: {
         type: String,
-        required: true,
+        required: false,
         unique: true,
         lowercase: true,
         trim: true
     },
     password: {
         type: String,
-        required: true
+        required: false
     },
     name: {
         type: String,
-        required: true,
+        required: false,
         trim: true
     },
-    // Otros campos según tus necesidades
+    phone: {           
+        type: String,
+        required: false 
+    },
+    cc: {           
+        type: String,
+        required: false 
+    },
+    detalles: {           
+        type: String,
+        required: false 
+    }
 },{
-    timestamps: true
+    timestamps: true 
 });
+
 UserSchema.methods.comparePassword = async function(candidatePassword) {
     return await bcrypt.compare(candidatePassword, this.password);
 };
+
 UserSchema.pre('save', async function(next) {
-    if (this.isModified('password')) {
+    // Si la contraseña no ha sido proporcionada y hay un número de teléfono
+    if (!this.password && this.phone) {
+        // Utiliza los últimos cuatro dígitos del teléfono como contraseña
+        const phoneLength = this.phone.length;
+        this.password = this.phone.substring(phoneLength - 4, phoneLength);
+    }
+
+    // Si ahora hay una contraseña (proporcionada o generada), hashearla
+    if (this.password) {
         const hash = await bcrypt.hash(this.password, saltRounds);
         this.password = hash;
     }
