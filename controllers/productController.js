@@ -46,3 +46,19 @@ exports.deleteProductById = async (req, res) => {
     res.status(500).json({ success: false, error: "Error al eliminar el producto" });
   }
 };
+
+exports.updateProductById = async (req, res) => {
+  try {
+    const productId = req.params.id;
+    const updatedData = req.body; // Los nuevos datos del producto a actualizar
+    const product = await Product.findByIdAndUpdate(productId, updatedData, { new: true });
+
+    if (!product) {
+      return res.status(404).json({ success: false, error: "Producto no encontrado" });
+    }
+
+    res.status(200).json({ success: true, message: "Producto actualizado con éxito", data: product });
+  } catch (error) {
+    res.status(500).json({ success: false, error: "Error al actualizar el producto" });
+  }
+};
