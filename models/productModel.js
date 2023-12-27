@@ -8,23 +8,24 @@ const ProductSchema = new mongoose.Schema({
   },
   description: {
     type: String,
-    required: true
+    required: false
   },
   price: {
     type: Number,
-    required: true
+    required: false
   },
   box: {
     type: [Number], // Ahora es un arreglo de números
-    //required: true
+    required: false
   },
   stock: {
     type: Number,
     default: 0, // Puedes establecer un valor por defecto
+    required: false
   },
   category: {
     type: String,
-    required: true
+    required: false
   },
 },{ timestamps: true });
 
