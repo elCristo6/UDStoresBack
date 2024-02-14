@@ -1,3 +1,4 @@
+//newBillModel
 const mongoose = require('mongoose');
 
 const NewBillSchema = new mongoose.Schema({
@@ -5,6 +6,26 @@ const NewBillSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     required: true
+  },
+  userName: { // Añadir campo para el nombre del usuario
+    type: String,
+    required: false // Puede ser opcional dependiendo de tus necesidades
+  },
+  userPhone: { // Añadir campo para el teléfono del usuario
+    type: String,
+    required: false // Puede ser opcional dependiendo de tus necesidades
+  },
+  userEmail: { // Añadir campo para el teléfono del usuario
+    type: String,
+    required: false // Puede ser opcional dependiendo de tus necesidades
+  },
+  userCC: {
+    type: String,
+    required: false, // Ajusta según la necesidad de tu aplicación
+  },
+  userDetalles: {
+    type: String,
+    required: false, // Ajusta según la necesidad de tu aplicación
   },
   products: [
     {
@@ -19,7 +40,23 @@ const NewBillSchema = new mongoose.Schema({
       }
     }
   ],
+  medioPago: {
+    type: String,
+    required: false // Cambia a false si el campo puede ser opcional
+  },
+  cambio: {
+    type: Number,
+    required: false // Establece si este campo es obligatorio o no
+  },
+  pagaCon: {
+    type: Number,
+    required: false // Establece si este campo es obligatorio o no
+  },
   totalAmount: {
+    type: Number,
+    required: true
+  },
+  consecutivo: { // Campo para el número de consecutivo
     type: Number,
     required: true
   },
