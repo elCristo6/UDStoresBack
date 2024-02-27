@@ -40,6 +40,20 @@ const NewBillSchema = new mongoose.Schema({
       }
     }
   ],
+  servicio:[
+    {
+      type:mongoose.Schema.Types.ObjectId,
+      ref:'Servicio',
+      required:false
+    }
+  ],
+  impresiones:[
+   {
+      type:mongoose.Schema.Types.ObjectId,
+      ref:'Impresion',
+      required:false
+   }
+  ],
   medioPago: {
     type: String,
     required: false // Cambia a false si el campo puede ser opcional
