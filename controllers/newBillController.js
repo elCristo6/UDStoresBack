@@ -26,7 +26,7 @@ const handleUserLookupOrCreate = async (userName, userPhone, userEmail, userCC, 
     user = new User({
       name: userName || 'Usuario Anónimo',
       phone: userPhone || 'Sin Teléfono',
-      email: userEmail || `no-email-${Date.now()}@example.com`,
+      email: userEmail || null,
       cc: userCC,
       detalles: userDetalles
     });
