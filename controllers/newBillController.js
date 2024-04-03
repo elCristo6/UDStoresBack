@@ -4,6 +4,14 @@ const NewBill = require('../models/newBillModel');
 const Consecutivo = require('../models/consecutivoNewBill');
 const Impresion = require('../models/impresionModel');
 const Servicio = require('../models/servicioModel');
+const moment = require('moment-timezone');
+
+// Establece la zona horaria de Bogotá
+const zonaHorariaBogota = 'America/Bogota';
+
+// Calcula el inicio y fin del día en la zona horaria de Bogotá
+const inicioDelDia = moment().tz(zonaHorariaBogota).startOf('day').toDate();
+const finDelDia = moment().tz(zonaHorariaBogota).endOf('day').toDate();
 
 const getNextSequence = async (name) => {
   const consecutivo = await Consecutivo.findOneAndUpdate(
@@ -91,7 +99,7 @@ exports.createBill = async (req, res) => {
     res.status(500).json({ success: false, error: "Error interno al crear la nueva factura" });
   }
 };
-
+/*
 exports.getFacturas = async (req, res) => {
   try {
     const facturas = await NewBill.find().populate('products.product impresiones servicio');
@@ -99,5 +107,26 @@ exports.getFacturas = async (req, res) => {
   } catch (error) {
     console.error('Error al recuperar las facturas:', error);
     res.status(500).json({ success: false, error: "Error interno al recuperar las facturas" });
+  }
+};
+*/
+exports.getFacturas = async (req, res) => {
+  try {
+    // Calcula el inicio y fin del día en la zona horaria de Bogotá
+    const inicioDelDia = moment().tz('America/Bogota').startOf('day').toDate();
+    const finDelDia = moment().tz('America/Bogota').endOf('day').toDate();
+
+    // Filtra las facturas que fueron creadas dentro del rango del día actual en Bogotá
+    const facturasDelDia = await NewBill.find({
+      createdAt: {
+        $gte: inicioDelDia,
+        $lt: finDelDia
+      }
+    }).populate('products.product impresiones servicio');
+
+    res.status(200).json({ success: true, data: facturasDelDia });
+  } catch (error) {
+    console.error('Error al recuperar las facturas del día:', error);
+    res.status(500).json({ success: false, error: "Error interno al recuperar las facturas del día" });
   }
 };
