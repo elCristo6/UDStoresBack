@@ -1,4 +1,4 @@
-// models/Product.js
+// models/servicioModel.js
 const mongoose = require('mongoose');
 
 const ServicioSchema = new mongoose.Schema({
