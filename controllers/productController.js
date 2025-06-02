@@ -33,12 +33,14 @@ exports.getProductById = async (req, res) => {
 
 exports.createProduct = async (req, res) => {
   try {
-    console.log('Archivos recibidos:', req.files);
+    console.log('req.files:', req.files);
 
     // Genera las URLs CloudFront
     const cfDomain = process.env.CLOUDFRONT_DOMAIN;
+    console.log('CF_DOMAIN:', cfDomain);
     const imageUrls = (req.files || []).map(f => {
       // multer-s3 te da f.key = la "key" en S3, p.ej. "products/12345-name.png"
+      console.log('>> f.key =', f.key);
       return `https://${cfDomain}/${f.key}`;
     });
 
@@ -93,5 +95,50 @@ exports.deleteProductById = async (req, res) => {
     res.status(200).json({ success: true, message: "Producto eliminado con éxito", data: product });
   } catch (error) {
     res.status(500).json({ success: false, error: "Error al eliminar el producto" });
+  }
+};
+
+
+exports.deleteProductImage = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { imageUrl } = req.body;
+    if (!imageUrl) {
+      return res.status(400).json({ success: false, error: "Debes enviar imageUrl en el body." });
+    }
+
+    // 1) Extrae la key de S3 a partir de la URL de CloudFront
+    const cfDomain = process.env.CLOUDFRONT_DOMAIN;
+    const prefix = `https://${cfDomain}/`;
+    if (!imageUrl.startsWith(prefix)) {
+      return res.status(400).json({ success: false, error: "La URL no corresponde al dominio de CloudFront." });
+    }
+    const key = imageUrl.substring(prefix.length); // p.ej. "products/1747328698003-img.png"
+
+    // 2) Borra el objeto de S3
+    await S3.deleteObject({
+      Bucket: process.env.AWS_S3_BUCKET_NAME,
+      Key: key
+    }).promise();
+
+    // 3) Actualiza el documento Mongo: quita esa URL del array images
+    const updated = await Product.findByIdAndUpdate(
+      id,
+      { $pull: { images: imageUrl } },
+      { new: true }
+    );
+
+    if (!updated) {
+      return res.status(404).json({ success: false, error: "Producto no encontrado." });
+    }
+
+    res.json({
+      success: true,
+      message: "Imagen eliminada con éxito",
+      data: updated
+    });
+  } catch (err) {
+    console.error('Error al eliminar imagen:', err);
+    res.status(500).json({ success: false, error: "Error interno al eliminar la imagen." });
   }
 };

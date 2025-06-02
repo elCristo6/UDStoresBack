@@ -38,6 +38,8 @@ router.post('/', upload.array('images', 5), productController.createProduct);
 
 // Agrega el middleware upload.array('images', 5) para procesar archivos
 router.put('/:id', upload.array('images', 5), productController.updateProductById);
+// Antes de exportar router, añade:
+router.delete('/:id/images', productController.deleteProductImage);
 router.get('/:id', productController.getProductById);
 router.delete('/:id', productController.deleteProductById);
 module.exports = router;
