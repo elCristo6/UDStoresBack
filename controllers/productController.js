@@ -1,11 +1,209 @@
 // controllers/ProductController.js
 
 const Product = require('../models/productModel');
+const NewBill = require('../models/newBillModel');
 const sharp = require('sharp');
 const aws = require('aws-sdk');
 const S3 = new aws.S3();
 
+/**
+ * GET /api/products/high-stock?limit=10
+ * Devuelve los productos con mayor stock disponible.
+ */
+exports.getHighStockProducts = async (req, res) => {
+  try {
+    // Leer ?limit=N (por defecto 10)
+    const q = req.query.limit;
+    const limit = (q && !isNaN(parseInt(q, 10)))
+      ? parseInt(q, 10)
+      : 10;
 
+    const highStock = await Product.find()
+      .sort({ stock: -1 })            // stock descendente (mayor primero)
+      .limit(limit)
+      .select('name price stock images');
+
+    res.status(200).json({
+      success: true,
+      message: `Top ${highStock.length} productos con mayor stock`,
+      data: highStock
+    });
+  } catch (err) {
+    console.error('Error en getHighStockProducts:', err);
+    res.status(500).json({ success: false, error: 'Error al obtener productos con alto stock' });
+  }
+};
+
+/**
+ * GET /api/products/low-stock?limit=10
+ * Devuelve los productos con menor stock disponible.
+ */
+exports.getLowStockProducts = async (req, res) => {
+  try {
+    // lee el query param
+    const q = req.query.limit;
+    // intenta parsear a entero en base 10, si no existe o es NaN usa 10
+    const limit = (q && !isNaN(parseInt(q, 10)))
+      ? parseInt(q, 10)
+      : 10;
+
+    const lowStock = await Product.find()
+      .sort({ stock: 1 })              // stock ascendente (menor primero)
+      .limit(limit)
+      .select('name price stock images');
+
+    res.status(200).json({
+      success: true,
+      message: `Top ${lowStock.length} productos con menor stock`,
+      data: lowStock
+    });
+  } catch (err) {
+    console.error('Error en getLowStockProducts:', err);
+    res.status(500).json({ success: false, error: 'Error al obtener productos con bajo stock' });
+  }
+};
+/**
+ * GET /api/products/by-category/:catId
+ */
+exports.getProductsByCategory = async (req, res) => {
+  try {
+    const { catId } = req.params;
+   // Ahora, busca dentro del array
+    const products = await Product.find({ categories: catId });
+    res.json({ success: true, data: products });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, error: 'Error al filtrar productos' });
+  }
+};
+
+/**
+ * GET /api/products/new-arrivals?limit=8
+ * Devuelve los productos más recientes, ordenados por fecha de creación descendente.
+ */
+exports.getNewArrivals = async (req, res) => {
+  try {
+    // Parámetro opcional ?limit=8 (por defecto 8)
+    const limit = parseInt(req.query.limit, 10) || 8;
+
+    const arrivals = await Product.find()
+      .sort({ updatedAt: -1 })
+      .limit(limit)
+      .select('name price images updatedAt');
+
+    res.status(200).json({
+      success: true,
+      message: `Últimas ${arrivals.length} nuevas llegadas`,
+      data: arrivals
+    });
+  } catch (error) {
+    console.error('Error en getNewArrivals:', error);
+    res.status(500).json({ success: false, error: 'Error al obtener nuevas llegadas' });
+  }
+};
+/**
+ * Devuelve los productos con menor volumen de ventas.
+ * Query param opcional: ?limit=5 (por defecto 10)
+ */
+exports.getLeastSellingProducts = async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit, 10) || 10;
+
+    const bottom = await NewBill.aggregate([
+      { $unwind: '$products' },
+      {
+        $group: {
+          _id: '$products.product',
+          totalSold: { $sum: '$products.quantity' }
+        }
+      },
+      // Orden ascendente para los menos vendidos
+      { $sort: { totalSold: 1 } },
+      { $limit: limit },
+      {
+        $lookup: {
+          from: 'products',
+          localField: '_id',
+          foreignField: '_id',
+          as: 'product'
+        }
+      },
+      { $unwind: '$product' },
+      {
+        $project: {
+          _id: '$product._id',
+          name: '$product.name',
+          description: '$product.description',
+          price: '$product.price',
+          images: '$product.images',
+          totalSold: 1
+        }
+      }
+    ]);
+
+    res.status(200).json({
+      success: true,
+      message: `Top ${bottom.length} productos menos vendidos`,
+      data: bottom
+    });
+  } catch (error) {
+    console.error('Error en getLeastSellingProducts:', error);
+    res.status(500).json({ success: false, error: 'Error al obtener los productos menos vendidos' });
+  }
+};
+
+exports.getTopSellingProducts = async (req, res) => {
+  try {
+    // Permitir un parámetro ?limit=5, por defecto 10
+    const limit = parseInt(req.query.limit, 10) || 10;
+
+    const top = await NewBill.aggregate([
+      // Desenrolla cada producto de cada factura
+      { $unwind: '$products' },
+      // Agrupa por ID de producto y suma las cantidades
+      {
+        $group: {
+          _id: '$products.product',
+          totalSold: { $sum: '$products.quantity' }
+        }
+      },
+      // Ordena de mayor a menor
+      { $sort: { totalSold: -1 } },
+      // Limita al top N
+      { $limit: limit },
+      // Trae datos del producto
+      {
+        $lookup: {
+          from: 'products',             // nombre de la colección en Mongo
+          localField: '_id',
+          foreignField: '_id',
+          as: 'product'
+        }
+      },
+      { $unwind: '$product' },
+      // Formatea la salida
+      {
+        $project: {
+          _id: '$product._id',
+          name: '$product.name',
+          description: '$product.description',
+          price: '$product.price',
+          images: '$product.images',
+          totalSold: 1
+        }
+      }
+    ]);
+
+    res.status(200).json({
+      success: true,
+      message: `Top ${top.length} productos más vendidos`,
+      data: top
+    });
+  } catch (error) {
+    console.error('Error en getTopSellingProducts:', error);
+    res.status(500).json({ success: false, error: 'Error al obtener los productos más vendidos' });
+  }
+};
 
 exports.getProducts = async (req, res) => {
   try {
@@ -43,7 +241,16 @@ exports.createProduct = async (req, res) => {
       console.log('>> f.key =', f.key);
       return `https://${cfDomain}/${f.key}`;
     });
-
+// parsear posibles múltiples IDs que vengan como JSON o como cadena CSV
+let cats = [];
+if (req.body.categories) {
+  if (Array.isArray(req.body.categories)) {
+    cats = req.body.categories;
+  } else if (typeof req.body.categories === 'string') {
+    // form-data suele enviar "id1,id2,id3"
+    cats = req.body.categories.split(',').map(s => s.trim());
+  }
+}
     const productData = {
       ...req.body,
       images: imageUrls
@@ -67,13 +274,24 @@ exports.updateProductById = async (req, res) => {
     const cfDomain = process.env.CLOUDFRONT_DOMAIN;
     const newUrls = (req.files || []).map(f => `https://${cfDomain}/${f.key}`);
 
+    // parsear incoming
+let cats = product.categories || [];
+if (req.body.categories) {
+  if (Array.isArray(req.body.categories)) {
+    cats = req.body.categories;
+  } else {
+    cats = req.body.categories.split(',').map(s => s.trim());
+  }
+}
+
     const updated = await Product.findByIdAndUpdate(
       id,
       {
         ...req.body,
         images: newUrls.length
           ? [...(product.images||[]), ...newUrls]
-          : product.images
+          : product.images,
+          categories: cats
       },
       { new: true }
     );
