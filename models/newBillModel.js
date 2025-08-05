@@ -37,6 +37,14 @@ const NewBillSchema = new mongoose.Schema({
       quantity: {
         type: Number,
         required: true
+      },
+      appliedPrice: { // nuevo campo para el precio usado en la venta
+        type: Number,
+        required: true
+      },
+      originalPrice: { // opcional: precio base del producto en ese momento
+        type: Number,
+        required: false
       }
     }
   ],

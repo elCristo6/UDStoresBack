@@ -1,5 +1,6 @@
 const User = require('../models/userModel');
 
+
 exports.register = async (req, res) => {
     try {
         // Verificar si el email o el teléfono ya están registrados
@@ -90,3 +91,25 @@ exports.deleteByEmail = async (req, res) => {
         res.status(500).send({ error: 'Error al eliminar el usuario.' });
     }
 };
+exports.findById = async (req, res) => {
+    try {
+      const id = req.params.id;
+  
+      if (!id || id.length !== 24) {
+        return res.status(400).json({ error: 'ID inválido' });
+      }
+  
+      const user = await User.findById(id);
+  
+      if (!user) {
+        return res.status(404).json({ error: 'Usuario no encontrado' });
+      }
+  
+      res.status(200).json(user);
+    } catch (err) {
+      console.error('Error al buscar usuario por ID:', err);
+      res.status(500).json({ error: 'Error interno al buscar usuario por ID' });
+    }
+  };
+
+

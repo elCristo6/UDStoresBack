@@ -83,7 +83,19 @@ exports.createBill = async (req, res) => {
     const newBill = new NewBill({
       consecutivo,
       user: user._id,
-      products: productDetails.map(({ productId, quantity }) => ({ product: productId, quantity })),
+     // products: productDetails.map(({ productId, quantity }) => ({ product: productId, quantity })),
+     products: await Promise.all(productDetails.map(async ({ productId, quantity, appliedPrice }) => {
+      const product = await Product.findById(productId);
+      if (!product) {
+        throw new Error(`Producto con ID ${productId} no encontrado`);
+      }
+      return {
+        product: productId,
+        quantity,
+        appliedPrice,               // viene del frontend
+        originalPrice: product.price // se guarda el precio base del momento
+      };
+    })),
       impresiones: impresionesIds,
       servicio: servicioIds,
       totalAmount,
