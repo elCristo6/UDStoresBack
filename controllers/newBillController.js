@@ -21,6 +21,28 @@ const getNextSequence = async (name) => {
   );
   return consecutivo.seq;
 };
+/*
+const handleUserLookupOrCreate = async (userName, userPhone, userEmail, userCC, userDetalles) => {
+  let user = await User.findOne({ 
+    $or: [
+      { phone: userPhone }, 
+      { name: userName }
+    ] 
+  });
+
+  if (!user) {
+    user = new User({
+      name: userName || 'Usuario Anónimo',
+      phone: userPhone || 'Sin Teléfono',
+      email: userEmail || `no-email-${Date.now()}@example.com`,
+      cc: userCC,
+      detalles: userDetalles
+    });
+    await user.save();
+  }
+  return user;
+};
+*/
 
 const handleUserLookupOrCreate = async (userName, userPhone, userEmail, userCC, userDetalles) => {
   let user = await User.findOne({ 
@@ -42,7 +64,6 @@ const handleUserLookupOrCreate = async (userName, userPhone, userEmail, userCC, 
   }
   return user;
 };
-
 exports.createBill = async (req, res) => {
   try {
     const consecutivo = await getNextSequence('factura');

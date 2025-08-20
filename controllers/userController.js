@@ -21,7 +21,8 @@ exports.register = async (req, res) => {
             name: req.body.name,
             phone: req.body.phone,
             cc: req.body.cc,
-            detalles: req.body.detalles
+            detalles: req.body.detalles,
+            role: req.body.role || 'user' 
             // Otros campos, si los hay
         });
         await newUser.save();
@@ -32,25 +33,47 @@ exports.register = async (req, res) => {
     }
 };
 
+const jwt = require('jsonwebtoken');
+const secretKey = process.env.JWT_SECRET || 'clave-super-secreta';
+
 
 exports.authenticate = async (req, res) => {
     try {
-        const user = await User.findOne({ email: req.body.email });
-        if (!user) {
-            return res.status(404).send('Usuario no encontrado.');
-        }
+        const identifier = req.body.emailOrPhone;
+        const password = req.body.password;
 
-        const isMatch = await user.comparePassword(req.body.password);
-        if (!isMatch) {
-            return res.status(401).send('Contraseña incorrecta.');
-        }
+        // Validar si el identificador es email o teléfono
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        const query = emailRegex.test(identifier)
+            ? { email: identifier }
+            : { phone: identifier };
 
+        // Buscar usuario por email o teléfono
+        const user = await User.findOne(query);
+        if (!user) return res.status(404).send('Usuario no encontrado.');
+
+        // Comparar contraseña
+        const isMatch = await user.comparePassword(password);
+        if (!isMatch) return res.status(401).send('Contraseña incorrecta.');
+
+        // Generar token
+        const token = jwt.sign(
+            { id: user._id, role: user.role },
+            secretKey,
+            { expiresIn: '1d' }
+        );
+
+        // Responder con éxito
         res.send({
             message: 'Usuario autenticado con éxito.',
-            name: user.name
+            token,
+            name: user.name,
+            role: user.role
         });
+
     } catch (err) {
-        res.status(500).send(err);
+        console.error('Error en autenticación:', err);
+        res.status(500).send(err.message);
     }
 };
 exports.findByPhone = async (req, res) => {
