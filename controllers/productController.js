@@ -46,7 +46,7 @@ exports.getLowStockProducts = async (req, res) => {
     const limit = (q && !isNaN(parseInt(q, 10)))
       ? parseInt(q, 10)
       : 10;
-
+ 
     const lowStock = await Product.find()
       .sort({ stock: 1 })              // stock ascendente (menor primero)
       .limit(limit)
@@ -129,6 +129,14 @@ exports.getLeastSellingProducts = async (req, res) => {
         }
       },
       { $unwind: '$product' },
+         {
+        $lookup: {
+          from: 'categories',
+          localField: 'product.categories',
+          foreignField: '_id',
+          as: 'categories'
+        }
+      },
       {
         $project: {
           _id: '$product._id',
@@ -136,6 +144,12 @@ exports.getLeastSellingProducts = async (req, res) => {
           description: '$product.description',
           price: '$product.price',
           images: '$product.images',
+          stock: '$product.stock',    
+          box: '$product.box',    
+          categories: {
+            _id: 1,
+            name: 1
+          }, 
           totalSold: 1
         }
       }
@@ -181,6 +195,14 @@ exports.getTopSellingProducts = async (req, res) => {
         }
       },
       { $unwind: '$product' },
+         {
+        $lookup: {
+          from: 'categories',
+          localField: 'product.categories',
+          foreignField: '_id',
+          as: 'categories'
+        }
+      },
       // Formatea la salida
       {
         $project: {
@@ -189,6 +211,12 @@ exports.getTopSellingProducts = async (req, res) => {
           description: '$product.description',
           price: '$product.price',
           images: '$product.images',
+          stock: '$product.stock',    
+          box: '$product.box',      
+          categories: {
+            _id: 1,
+            name: 1
+          },
           totalSold: 1
         }
       }
@@ -358,5 +386,155 @@ exports.deleteProductImage = async (req, res) => {
   } catch (err) {
     console.error('Error al eliminar imagen:', err);
     res.status(500).json({ success: false, error: "Error interno al eliminar la imagen." });
+  }
+};
+
+/**
+ * GET /api/products/pdp/:slug
+ * Devuelve la información unificada del producto optimizada para Marketing (CRO),
+ * gestionando el stock agotado e inyectando productos relacionados de forma dinámica.
+ */
+
+exports.getProductDetailBySlug = async (req, res) => {
+  try {
+    const { slug } = req.params;
+
+    // 1. Lectura directa ultra rápida de la DB
+    const productData = await Product.findOne({ slug }).populate('categories', 'name');
+
+    if (!productData) {
+      return res.status(404).json({ success: false, error: "Producto no encontrado" });
+    }
+
+    const product = productData.toObject();
+    const availableStock = product.stock || 0;
+    const fakeOriginalPrice = product.price ? product.price * 1.25 : 0;
+
+    // 2. Buscar Productos Relacionados Dinámicos (Evita carruseles vacíos)
+    let relatedQuery = { _id: { $ne: product._id } }; 
+    if (product.categories && product.categories.length > 0) {
+      relatedQuery.categories = { $in: product.categories.map(c => c._id) };
+    } else if (product.category) {
+      relatedQuery.category = product.category; // Fallback para tus strings como "Electrónica"
+    }
+
+    const rawRelated = await Product.find(relatedQuery).limit(4).select('name price slug images stock');
+    const relatedProducts = rawRelated.map(p => ({
+      id: p._id,
+      name: p.name,
+      slug: p.slug,
+      price: p.price,
+      stock_status: p.stock > 0 ? 'in_stock' : 'out_of_stock',
+      image: p.images && p.images.length > 0 ? p.images[0] : null
+    }));
+
+    // 3. Estructura unificada para la App de Flutter
+    const pdpResponse = {
+      id: product._id,
+      name: product.name,
+      slug: product.slug,
+      
+      pricing: {
+        current_price: product.price,
+        original_price: parseFloat(fakeOriginalPrice.toFixed(2)),
+        discount_percentage: 20,
+        currency: 'COP'
+      },
+
+      stock_management: {
+        status: availableStock > 0 ? (availableStock <= 5 ? 'low_stock' : 'in_stock') : 'out_of_stock',
+        available_quantity: availableStock,
+        show_low_stock_warning: availableStock > 0 && availableStock <= 5,
+        allow_backorder_subscription: availableStock === 0 
+      },
+
+      marketing_triggers: {
+        total_sales_count: product.total_sales || 0, // Ya no hace agregación, lee directo del documento migrado
+        viewers_right_now: Math.floor(Math.random() * (12 - 3 + 1)) + 3,
+        badge: availableStock === 0 ? "Agotado temporalmente" : (product.total_sales > 50 ? "Más Vendido" : "Recomendado")
+      },
+
+      shipping_logistics: {
+        free_shipping_eligible: product.price >= 200000,
+        free_shipping_threshold: 200000,
+        estimated_delivery_text: availableStock > 0 ? "Recíbelo en 24-48 horas" : "Despacho inmediato al reponer stock",
+      },
+
+      seo: {
+        meta_title: `Comprar ${product.name} - UDElectronics`,
+        meta_description: product.description ? product.description.substring(0, 155).replace(/\n/g, ' ') : ""
+      },
+
+      media: {
+        primary_image: product.images && product.images.length > 0 ? product.images[0] : null,
+        gallery: product.images || []
+      },
+
+      details: {
+        description: product.description,
+        box: product.box || [],
+        categories: product.categories,
+        category_text: product.category || null
+      },
+
+      related_products: relatedProducts
+    };
+
+    res.status(200).json({ success: true, data: pdpResponse });
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, error: "Error interno en el servidor" });
+  }
+};
+
+/**
+ * POST /api/products/utils/migrate-slugs-and-sales
+ * Función de una sola ejecución para actualizar productos antiguos con su slug y ventas acumuladas.
+ */
+exports.migrateOldProducts = async (req, res) => {
+  try {
+    const products = await Product.find();
+    let updatedCount = 0;
+
+    console.log(`=== Iniciando Remigración Masiva de ${products.length} productos ===`);
+
+    for (let product of products) {
+      
+      // 1. Asegurar el slug si por alguna razón faltara
+      if (!product.slug && product.name) {
+        product.slug = product.name
+          .toLowerCase()
+          .trim()
+          .replace(/[^\w\s-]/g, '')
+          .replace(/[\s_-]+/g, '-')
+          .replace(/^-+|-+$/g, '');
+      }
+
+      // 2. Calcular las unidades vendidas cruzando con NewBill
+      const salesAggregation = await NewBill.aggregate([
+        { $unwind: '$products' },
+        { $match: { 'products.product': product._id } },
+        { $group: { _id: '$products.product', totalSold: { $sum: '$products.quantity' } } }
+      ]);
+
+      const totalSold = salesAggregation.length > 0 ? salesAggregation[0].totalSold : 0;
+      
+      // 3. PERSISTENCIA: Guardamos el dato calculado físicamente en el documento
+      product.total_sales = totalSold;
+      
+      // Forzamos el guardado en lote
+      await product.save();
+      updatedCount++;
+    }
+
+    res.status(200).json({
+      success: true,
+      message: `¡Remigración exitosa! Los contadores de ventas y slugs quedaron fijos en ${updatedCount} productos.`
+    });
+
+  } catch (error) {
+    console.error('Error durante la remigración:', error);
+    res.status(500).json({ success: false, error: 'Error en la actualización en lote', details: error.message });
   }
 };
