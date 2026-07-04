@@ -296,40 +296,47 @@ if (req.body.categories) {
 exports.updateProductById = async (req, res) => {
   try {
     const { id } = req.params;
+    
+    // 1. Buscamos el producto actual
     const product = await Product.findById(id);
     if (!product) return res.status(404).json({ success: false, error: "No encontrado" });
 
+    // 2. Conservamos tu lógica original de S3 para las imágenes
     const cfDomain = process.env.CLOUDFRONT_DOMAIN;
     const newUrls = (req.files || []).map(f => `https://${cfDomain}/${f.key}`);
 
-    // parsear incoming
-let cats = product.categories || [];
-if (req.body.categories) {
-  if (Array.isArray(req.body.categories)) {
-    cats = req.body.categories;
-  } else {
-    cats = req.body.categories.split(',').map(s => s.trim());
-  }
-}
+    // 3. Conservamos tu lógica original de parseo de categorías
+    let cats = product.categories || [];
+    if (req.body.categories) {
+      if (Array.isArray(req.body.categories)) {
+        cats = req.body.categories;
+      } else {
+        cats = req.body.categories.split(',').map(s => s.trim());
+      }
+    }
 
-    const updated = await Product.findByIdAndUpdate(
-      id,
-      {
-        ...req.body,
-        images: newUrls.length
-          ? [...(product.images||[]), ...newUrls]
-          : product.images,
-          categories: cats
-      },
-      { new: true }
-    );
+    // 4. Actualizamos el objeto del producto con los datos de req.body
+    // Mapeamos los campos que vienen en req.body al objeto 'product'
+    Object.keys(req.body).forEach(key => {
+        if(key !== 'categories') product[key] = req.body[key];
+    });
+
+    // 5. Aplicamos las imágenes y categorías
+    product.images = newUrls.length
+      ? [...(product.images || []), ...newUrls]
+      : product.images;
+    product.categories = cats;
+
+    // 6. GUARDADO FINAL: Al usar product.save(), el hook 'pre("save")' del modelo
+    // se ejecuta automáticamente, recalculando el slug si el nombre cambió.
+    const updated = await product.save();
+
     res.json({ success: true, data: updated });
   } catch (err) {
     console.error(err);
     res.status(500).json({ success: false, error: "Error al actualizar" });
   }
 };
-
 
 exports.deleteProductById = async (req, res) => {
   try {
@@ -491,27 +498,30 @@ exports.getProductDetailBySlug = async (req, res) => {
 /**
  * POST /api/products/utils/migrate-slugs-and-sales
  * Función de una sola ejecución para actualizar productos antiguos con su slug y ventas acumuladas.
- */
+ */// controllers/productController.js
+
 exports.migrateOldProducts = async (req, res) => {
   try {
     const products = await Product.find();
     let updatedCount = 0;
 
-    console.log(`=== Iniciando Remigración Masiva de ${products.length} productos ===`);
+    console.log(`=== Iniciando Remigración Forzada de Slugs Limpios (${products.length} productos) ===`);
 
     for (let product of products) {
-      
-      // 1. Asegurar el slug si por alguna razón faltara
-      if (!product.slug && product.name) {
+      if (product.name) {
+        // FORZAMOS la limpieza estricta de tildes y eñes directamente aquí
         product.slug = product.name
           .toLowerCase()
           .trim()
-          .replace(/[^\w\s-]/g, '')
-          .replace(/[\s_-]+/g, '-')
-          .replace(/^-+|-+$/g, '');
+          .normalize('NFD')             // Separa las tildes de las letras
+          .replace(/[\u0300-\u036f]/g, '') // Elimina los acentos desprendidos
+          .replace(/ñ/g, 'n')             // Convierte la ñ en n
+          .replace(/[^\w\s-]/g, '')       // Remueve símbolos extraños
+          .replace(/[\s_-]+/g, '-')       // Cambia espacios por guiones
+          .replace(/^-+|-+$/g, '');       // Quita guiones de los extremos
       }
 
-      // 2. Calcular las unidades vendidas cruzando con NewBill
+      // Volvemos a calcular/asegurar las ventas totales desde NewBill
       const salesAggregation = await NewBill.aggregate([
         { $unwind: '$products' },
         { $match: { 'products.product': product._id } },
@@ -519,22 +529,20 @@ exports.migrateOldProducts = async (req, res) => {
       ]);
 
       const totalSold = salesAggregation.length > 0 ? salesAggregation[0].totalSold : 0;
-      
-      // 3. PERSISTENCIA: Guardamos el dato calculado físicamente en el documento
       product.total_sales = totalSold;
-      
-      // Forzamos el guardado en lote
+
+      // Al modificar la propiedad .slug directamente en el objeto, Mongoose detectará el cambio y lo guardará
       await product.save();
       updatedCount++;
     }
 
     res.status(200).json({
       success: true,
-      message: `¡Remigración exitosa! Los contadores de ventas y slugs quedaron fijos en ${updatedCount} productos.`
+      message: `¡Remigración completada! Se limpiaron los acentos, tildes y eñes de ${updatedCount} productos.`
     });
 
   } catch (error) {
-    console.error('Error durante la remigración:', error);
-    res.status(500).json({ success: false, error: 'Error en la actualización en lote', details: error.message });
+    console.error('Error durante la remigración forzada:', error);
+    res.status(500).json({ success: false, error: error.message });
   }
 };

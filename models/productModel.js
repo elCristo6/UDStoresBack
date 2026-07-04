@@ -8,9 +8,7 @@ const ProductSchema = new mongoose.Schema({
   price: { type: Number, required: false },
   box: { type: [Number], required: false },
   stock: { type: Number, default: 0, required: false },
-
   total_sales: { type: Number, default: 0 },
-  
   categories: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Category'
@@ -18,15 +16,25 @@ const ProductSchema = new mongoose.Schema({
   
   images: { type: [String], required: false } 
 }, { timestamps: true });
-// 2. Middleware (Hook) para autogenerar el slug antes de guardar un producto nuevo
+
+
+// models/productModel.js
+
+// 2. Middleware (Hook) avanzado para autogenerar el slug perfecto para SEO y Marketing
 ProductSchema.pre('save', function(next) {
   if (this.isModified('name') && this.name) {
     this.slug = this.name
       .toLowerCase()
       .trim()
-      .replace(/[^\w\s-]/g, '') // Remueve caracteres especiales
-      .replace(/[\s_-]+/g, '-') // Cambia espacios por guiones
-      .replace(/^-+|-+$/g, ''); // Quita guiones sobrantes al inicio/final
+      // 1. Remplazar caracteres con acentos/tildes por letras limpias
+      .normalize('NFD') 
+      .replace(/[\u0300-\u036f]/g, '') // Separa y elimina las tildes de las letras
+      // 2. Tratar de forma específica la ñ si quedara algún residuo
+      .replace(/ñ/g, 'n') 
+      // 3. Limpieza estándar de caracteres especiales y guiones
+      .replace(/[^\w\s-]/g, '') // Remueve cualquier otro símbolo extraño
+      .replace(/[\s_-]+/g, '-') // Cambia espacios y guiones bajos por un solo guion
+      .replace(/^-+|-+$/g, ''); // Remueve guiones sobrantes al inicio o al final
   }
   next();
 });
