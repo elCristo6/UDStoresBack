@@ -235,17 +235,29 @@ exports.getTopSellingProducts = async (req, res) => {
 
 exports.getProducts = async (req, res) => {
   try {
-    const products = await Product.find();
-    res.status(200).json({ success: true, message: "Productos obtenidos con éxito", data: products });
+    const products = await Product.find()
+      .populate('categories', 'name description')
+      .sort({ createdAt: -1 });
+
+    res.status(200).json({
+      success: true,
+      message: "Productos obtenidos con éxito",
+      data: products
+    });
+
   } catch (error) {
-    res.status(500).json({ success: false, error: "Error al obtener los productos" });
+    res.status(500).json({
+      success: false,
+      error: "Error al obtener los productos"
+    });
   }
 };
 
 exports.getProductById = async (req, res) => {
   try {
     const productId = req.params.id;
-    const product = await Product.findById(productId);
+  const product = await Product.findById(productId)
+    .populate('categories', 'name description');
     if (!product) {
       return res.status(404).json({ success: false, error: "Producto no encontrado" });
     }
@@ -256,88 +268,114 @@ exports.getProductById = async (req, res) => {
 };
 
 
-
 exports.createProduct = async (req, res) => {
   try {
-    console.log('req.files:', req.files);
-
-    // Genera las URLs CloudFront
     const cfDomain = process.env.CLOUDFRONT_DOMAIN;
-    console.log('CF_DOMAIN:', cfDomain);
+
     const imageUrls = (req.files || []).map(f => {
-      // multer-s3 te da f.key = la "key" en S3, p.ej. "products/12345-name.png"
-      console.log('>> f.key =', f.key);
       return `https://${cfDomain}/${f.key}`;
     });
-// parsear posibles múltiples IDs que vengan como JSON o como cadena CSV
-let cats = [];
-if (req.body.categories) {
-  if (Array.isArray(req.body.categories)) {
-    cats = req.body.categories;
-  } else if (typeof req.body.categories === 'string') {
-    // form-data suele enviar "id1,id2,id3"
-    cats = req.body.categories.split(',').map(s => s.trim());
-  }
-}
+
+    let cats = [];
+
+    if (req.body.categories) {
+      if (Array.isArray(req.body.categories)) {
+        cats = req.body.categories;
+      } else if (typeof req.body.categories === 'string') {
+        cats = req.body.categories
+          .split(',')
+          .map(s => s.trim())
+          .filter(Boolean);
+      }
+    }
+
     const productData = {
       ...req.body,
+      categories: cats,
       images: imageUrls
     };
 
     const product = new Product(productData);
     await product.save();
-    res.status(201).json({ success: true, message: "Producto creado con éxito", data: product });
+
+    res.status(201).json({
+      success: true,
+      message: "Producto creado con éxito",
+      data: product
+    });
+
   } catch (err) {
     console.error(err);
-    res.status(400).json({ success: false, error: "Error al crear el producto" });
+    res.status(400).json({
+      success: false,
+      error: "Error al crear el producto"
+    });
   }
 };
-
 exports.updateProductById = async (req, res) => {
   try {
     const { id } = req.params;
-    
-    // 1. Buscamos el producto actual
+
     const product = await Product.findById(id);
-    if (!product) return res.status(404).json({ success: false, error: "No encontrado" });
 
-    // 2. Conservamos tu lógica original de S3 para las imágenes
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        error: "Producto no encontrado"
+      });
+    }
+
     const cfDomain = process.env.CLOUDFRONT_DOMAIN;
-    const newUrls = (req.files || []).map(f => `https://${cfDomain}/${f.key}`);
 
-    // 3. Conservamos tu lógica original de parseo de categorías
+    const newUrls = (req.files || []).map(f => {
+      return `https://${cfDomain}/${f.key}`;
+    });
+
     let cats = product.categories || [];
-    if (req.body.categories) {
+
+    if (req.body.categories !== undefined) {
       if (Array.isArray(req.body.categories)) {
         cats = req.body.categories;
-      } else {
-        cats = req.body.categories.split(',').map(s => s.trim());
+      } else if (typeof req.body.categories === 'string') {
+        cats = req.body.categories
+          .split(',')
+          .map(s => s.trim())
+          .filter(Boolean);
       }
     }
 
-    // 4. Actualizamos el objeto del producto con los datos de req.body
-    // Mapeamos los campos que vienen en req.body al objeto 'product'
     Object.keys(req.body).forEach(key => {
-        if(key !== 'categories') product[key] = req.body[key];
+      if (key !== 'categories') {
+        product[key] = req.body[key];
+      }
     });
 
-    // 5. Aplicamos las imágenes y categorías
     product.images = newUrls.length
       ? [...(product.images || []), ...newUrls]
       : product.images;
+
     product.categories = cats;
 
-    // 6. GUARDADO FINAL: Al usar product.save(), el hook 'pre("save")' del modelo
-    // se ejecuta automáticamente, recalculando el slug si el nombre cambió.
     const updated = await product.save();
 
-    res.json({ success: true, data: updated });
+    const populated = await Product.findById(updated._id)
+      .populate('categories', 'name description');
+
+    res.json({
+      success: true,
+      message: "Producto actualizado con éxito",
+      data: populated
+    });
+
   } catch (err) {
     console.error(err);
-    res.status(500).json({ success: false, error: "Error al actualizar" });
+
+    res.status(500).json({
+      success: false,
+      error: "Error al actualizar el producto"
+    });
   }
 };
-
 exports.deleteProductById = async (req, res) => {
   try {
     const productId = req.params.id;

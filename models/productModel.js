@@ -1,3 +1,5 @@
+
+// models/productModel.js
 const mongoose = require('mongoose');
 
 const ProductSchema = new mongoose.Schema({
@@ -9,6 +11,13 @@ const ProductSchema = new mongoose.Schema({
   box: { type: [Number], required: false },
   stock: { type: Number, default: 0, required: false },
   total_sales: { type: Number, default: 0 },
+
+  mainCategory: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Category',
+    required: false
+  },
+
   categories: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Category'
@@ -17,8 +26,6 @@ const ProductSchema = new mongoose.Schema({
   images: { type: [String], required: false } 
 }, { timestamps: true });
 
-
-// models/productModel.js
 
 // 2. Middleware (Hook) avanzado para autogenerar el slug perfecto para SEO y Marketing
 ProductSchema.pre('save', function(next) {

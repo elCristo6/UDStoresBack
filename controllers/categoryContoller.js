@@ -46,7 +46,7 @@ exports.updateCategory = async (req, res) => {
 exports.deleteCategory = async (req, res) => {
   try {
     // Antes de borrar: opcionalmente, verificar si hay productos con esa categoría
-    const productos = await Product.find({ category: req.params.id }).limit(1);
+    const productos = await Product.find({ categories: req.params.id }).limit(1);
     if (productos.length)
       return res.status(400).json({ success: false, error: 'No se puede eliminar: existen productos asociados' });
 
