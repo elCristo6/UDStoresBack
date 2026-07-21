@@ -179,3 +179,17 @@ exports.finalizeLoanToBill = async (req, res) => {
         res.status(500).json({ success: false, error: err.message }); 
     }
 };
+// --- OBTENER HISTORIAL DE PRÉSTAMOS CERRADOS / FACTURADOS ---
+exports.getClosedLoansHistory = async (req, res) => {
+    try {
+        // Buscamos los préstamos con status 'closed' y traemos la información clave
+        const closedLoans = await Loan.find({ status: 'closed' })
+            .populate('client', 'name phone detalles')
+            .populate('items.product', 'name price')
+            .sort({ updatedAt: -1 }); // Los más recientes primero
+
+        res.json({ success: true, data: closedLoans });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+};

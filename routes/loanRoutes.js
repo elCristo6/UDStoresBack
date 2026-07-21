@@ -7,4 +7,5 @@ router.patch('/return-item', loanController.returnLoanItem); // Para devolver
 router.get('/active/:clientId', loanController.getActiveLoan);
 router.get('/active-all', loanController.getAllActiveLoansSummary);
 router.post('/finalize/:loanId', loanController.finalizeLoanToBill);
+router.get('/history-closed', loanController.getClosedLoansHistory);
 module.exports = router;
