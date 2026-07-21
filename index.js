@@ -10,6 +10,7 @@ const billRoute = require('./routes/newBillRoute');
 const categoryRoutes = require('./routes/categoryRoute');
 const salesRoutes = require('./routes/salesRoute');
 const cartRoute = require('./routes/cartRoute');
+const loanRoutes = require('./routes/loanRoutes');
 
 const cors = require('cors');
 const morgan = require('morgan');
@@ -36,6 +37,7 @@ app.use('/api/products', productRoutes);
 app.use('/api/users', userRoute);
 app.use('/api/newBill', billRoute);
 app.use('/api/cart', cartRoute);
+app.use('/api/loans', loanRoutes);
 
 // =========================================================================
 // SITEMAP AUTOMÁTICO PARA BUSCADORES

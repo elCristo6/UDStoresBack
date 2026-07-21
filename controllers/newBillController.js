@@ -64,6 +64,7 @@ const handleUserLookupOrCreate = async (userName, userPhone, userEmail, userCC, 
   }
   return user;
 };
+
 exports.createBill = async (req, res) => {
   try {
     const consecutivo = await getNextSequence('factura');
@@ -163,3 +164,5 @@ exports.getFacturas = async (req, res) => {
     res.status(500).json({ success: false, error: "Error interno al recuperar las facturas del día" });
   }
 };
+
+exports.getNextSequence = getNextSequence;

@@ -1,5 +1,29 @@
 const User = require('../models/userModel');
 
+exports.updateUser = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const updateData = req.body;
+
+        // Opcional: Impedir que el usuario cambie su propio rol si no es admin
+        // (Esto depende de cómo quieras gestionar la seguridad)
+        
+        const updatedUser = await User.findByIdAndUpdate(
+            id, 
+            { $set: updateData }, 
+            { new: true, runValidators: true } // new:true devuelve el usuario actualizado
+        );
+
+        if (!updatedUser) {
+            return res.status(404).json({ error: 'Usuario no encontrado.' });
+        }
+
+        res.status(200).json({ message: 'Usuario actualizado con éxito.', user: updatedUser });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Error al actualizar el usuario.' });
+    }
+};
 
 exports.register = async (req, res) => {
     try {
