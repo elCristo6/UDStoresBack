@@ -15,4 +15,5 @@ router.get('/phone/:phone', userController.findByPhone);
 router.get('/id/:id', userController.findById); // Nuevo endpoint por ID
 // Ruta para editar usuario (puedes protegerla con admin si prefieres)
 router.patch('/:id', verifyToken, requireRole('admin'), userController.updateUser);
+router.get('/stores', verifyToken, requireRole('admin'), userController.getStores);
 module.exports = router;

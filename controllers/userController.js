@@ -160,3 +160,13 @@ exports.findById = async (req, res) => {
   };
 
 
+exports.getStores = async (req, res) => {
+    try {
+        // Busca todos los usuarios cuyo rol sea 'store'
+        const stores = await User.find({ role: 'store' });
+        res.status(200).json(stores);
+    } catch (err) {
+        console.error('Error al obtener los locales (stores):', err);
+        res.status(500).json({ error: 'Error al obtener los locales.' });
+    }
+};
