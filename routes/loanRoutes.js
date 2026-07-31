@@ -8,4 +8,5 @@ router.get('/active/:clientId', loanController.getActiveLoan);
 router.get('/active-all', loanController.getAllActiveLoansSummary);
 router.post('/finalize/:loanId', loanController.finalizeLoanToBill);
 router.get('/history-closed', loanController.getClosedLoansHistory);
+router.patch('/update-item-price', loanController.updateLoanItemPrice);
 module.exports = router;

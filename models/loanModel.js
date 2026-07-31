@@ -1,19 +1,20 @@
-//models/loanModel.js
-
 const mongoose = require('mongoose');
+const moment = require('moment-timezone');
+
+const LoanItemSchema = new mongoose.Schema({
+    product: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', required: true },
+    qtyBorrowed: { type: Number, required: true },
+    qtyReturned: { type: Number, default: 0 },
+    customPrice: { type: Number, default: null }, // <--- NUEVO CAMPO: Si es null, usa el original
+    createdAt: {
+        type: Date,
+        default: () => moment().tz('America/Bogota').toDate()
+    }
+});
 
 const LoanSchema = new mongoose.Schema({
-    // Referencia al usuario (el local identificado como 'store')
     client: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-    
-    // Lista de productos prestados
-    items: [{
-        product: { type: mongoose.Schema.Types.ObjectId, ref: 'Product' },
-        qtyBorrowed: { type: Number, required: true },
-        qtyReturned: { type: Number, default: 0 }
-    }],
-    
-    // Para saber si el local debe algo o ya entregó todo
+    items: [LoanItemSchema],
     status: { type: String, enum: ['open', 'closed'], default: 'open' },
 }, { timestamps: true });
 
