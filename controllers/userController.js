@@ -23,10 +23,12 @@ exports.updateUser = async (req, res) => {
         console.error(err);
         res.status(500).json({ error: 'Error al actualizar el usuario.' });
     }
-};
-exports.register = async (req, res) => {
+};exports.register = async (req, res) => {
     try {
-        // 1. Verificar si el email ya está registrado (SOLO si se envió un email)
+        // 🔥 AGREGA ESTA LÍNEA PARA ESPIAR LOS DATOS QUE LLEGAN 🔥
+        console.log("Datos recibidos desde Flutter:", req.body);
+
+        // 1. Verificar si el email ya está registrado 
         if (req.body.email) {
             const existingUserByEmail = await User.findOne({ email: req.body.email });
             if (existingUserByEmail) {
@@ -34,7 +36,7 @@ exports.register = async (req, res) => {
             }
         }
 
-        // 2. Verificar si el teléfono ya está registrado (SOLO si se envió un teléfono)
+        // 2. Verificar si el teléfono ya está registrado
         if (req.body.phone) {
             const existingUserByPhone = await User.findOne({ phone: req.body.phone });
             if (existingUserByPhone) {
@@ -56,11 +58,10 @@ exports.register = async (req, res) => {
         await newUser.save();
         res.status(201).send('Usuario registrado con éxito.');
     } catch (err) {
-        console.error(err); 
+        console.error("Error al guardar:", err); 
         return res.status(500).send(err.message); 
     }
 };
-
 const jwt = require('jsonwebtoken');
 const secretKey = process.env.JWT_SECRET || 'clave-super-secreta';
 
@@ -172,5 +173,26 @@ exports.getStores = async (req, res) => {
     } catch (err) {
         console.error('Error al obtener los locales (stores):', err);
         res.status(500).json({ error: 'Error al obtener los locales.' });
+    }
+};
+
+exports.deleteById = async (req, res) => {
+    try {
+        const id = req.params.id;
+        
+        // Verificamos que sea un ID de Mongo válido
+        if (!id || id.length !== 24) {
+            return res.status(400).json({ error: 'ID inválido' });
+        }
+
+        const result = await User.findByIdAndDelete(id);
+
+        if (!result) {
+            return res.status(404).send({ error: 'Usuario / Local no encontrado.' });
+        }
+        
+        res.status(200).send({ message: 'Local eliminado con éxito.' });
+    } catch (err) {
+        res.status(500).send({ error: 'Error al eliminar el local.' });
     }
 };
