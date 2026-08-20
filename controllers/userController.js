@@ -24,21 +24,25 @@ exports.updateUser = async (req, res) => {
         res.status(500).json({ error: 'Error al actualizar el usuario.' });
     }
 };
-
 exports.register = async (req, res) => {
     try {
-        // Verificar si el email o el teléfono ya están registrados
-        const existingUserByEmail = await User.findOne({ email: req.body.email });
-        if (existingUserByEmail) {
-            return res.status(409).send('El correo electrónico ya está registrado.');
+        // 1. Verificar si el email ya está registrado (SOLO si se envió un email)
+        if (req.body.email) {
+            const existingUserByEmail = await User.findOne({ email: req.body.email });
+            if (existingUserByEmail) {
+                return res.status(409).send('El correo electrónico ya está registrado.');
+            }
         }
 
-        const existingUserByPhone = await User.findOne({ phone: req.body.phone });
-        if (existingUserByPhone) {
-            return res.status(409).send('El número de teléfono ya está registrado.');
+        // 2. Verificar si el teléfono ya está registrado (SOLO si se envió un teléfono)
+        if (req.body.phone) {
+            const existingUserByPhone = await User.findOne({ phone: req.body.phone });
+            if (existingUserByPhone) {
+                return res.status(409).send('El número de teléfono ya está registrado.');
+            }
         }
 
-        // Crear y guardar el nuevo usuario
+        // 3. Crear y guardar el nuevo usuario
         const newUser = new User({
             email: req.body.email,
             password: req.body.password,
@@ -47,13 +51,13 @@ exports.register = async (req, res) => {
             cc: req.body.cc,
             detalles: req.body.detalles,
             role: req.body.role || 'user' 
-            // Otros campos, si los hay
         });
+        
         await newUser.save();
         res.status(201).send('Usuario registrado con éxito.');
     } catch (err) {
-        console.error(err); // Imprime el error completo en la consola del servidor
-        return res.status(500).send(err.message); // Envía un mensaje de error más detallado
+        console.error(err); 
+        return res.status(500).send(err.message); 
     }
 };
 
