@@ -11,7 +11,7 @@ const categoryRoutes = require('./routes/categoryRoute');
 const salesRoutes = require('./routes/salesRoute');
 const cartRoute = require('./routes/cartRoute');
 const loanRoutes = require('./routes/loanRoutes');
-
+const path = require('path');
 const cors = require('cors');
 const morgan = require('morgan');
 

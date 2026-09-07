@@ -270,10 +270,11 @@ exports.getProductById = async (req, res) => {
 
 exports.createProduct = async (req, res) => {
   try {
-    const cfDomain = process.env.CLOUDFRONT_DOMAIN;
+    const bucketName = process.env.AWS_MEDIA_BUCKET_NAME || 'udelectronics-media';
+    const region = process.env.AWS_REGION || 'us-east-1';
 
     const imageUrls = (req.files || []).map(f => {
-      return `https://${cfDomain}/${f.key}`;
+      return `https://${bucketName}.s3.${region}.amazonaws.com/${f.key}`;
     });
 
     let cats = [];
@@ -325,10 +326,11 @@ exports.updateProductById = async (req, res) => {
       });
     }
 
-    const cfDomain = process.env.CLOUDFRONT_DOMAIN;
+   const bucketName = process.env.AWS_MEDIA_BUCKET_NAME || 'udelectronics-media';
+    const region = process.env.AWS_REGION || 'us-east-1';
 
     const newUrls = (req.files || []).map(f => {
-      return `https://${cfDomain}/${f.key}`;
+      return `https://${bucketName}.s3.${region}.amazonaws.com/${f.key}`;
     });
 
     let cats = product.categories || [];
@@ -388,31 +390,49 @@ exports.deleteProductById = async (req, res) => {
     res.status(500).json({ success: false, error: "Error al eliminar el producto" });
   }
 };
-
-
 exports.deleteProductImage = async (req, res) => {
   try {
     const { id } = req.params;
     const { imageUrl } = req.body;
+    
     if (!imageUrl) {
       return res.status(400).json({ success: false, error: "Debes enviar imageUrl en el body." });
     }
 
-    // 1) Extrae la key de S3 a partir de la URL de CloudFront
-    const cfDomain = process.env.CLOUDFRONT_DOMAIN;
-    const prefix = `https://${cfDomain}/`;
-    if (!imageUrl.startsWith(prefix)) {
-      return res.status(400).json({ success: false, error: "La URL no corresponde al dominio de CloudFront." });
+    let key = '';
+    // Plan de respaldo por si fallan las variables de entorno
+    let targetBucket = process.env.AWS_MEDIA_BUCKET_NAME || 'udelectronics-media'; 
+
+    // 1) Lógica dual: Detectar si es una foto nueva (S3) o vieja (CloudFront)
+    if (imageUrl.includes('.amazonaws.com/')) {
+      // Es una URL del bucket nuevo de medios
+      const urlParts = imageUrl.split('.amazonaws.com/');
+      key = urlParts[1]; 
+    } else if (imageUrl.includes('cloudfront.net')) {
+      // Es una URL vieja del bucket de código
+      const urlParts = imageUrl.split('.net/');
+      key = urlParts[1];
+      targetBucket = process.env.AWS_S3_BUCKET_NAME || 'udelectronics.com'; 
+    } else {
+      // Por si intentas borrar la imagen que se guardó mal como "undefined"
+      const parts = imageUrl.split('/');
+      key = parts.slice(3).join('/'); // Extrae la ruta a la fuerza
     }
-    const key = imageUrl.substring(prefix.length); // p.ej. "products/1747328698003-img.png"
 
-    // 2) Borra el objeto de S3
-    await S3.deleteObject({
-      Bucket: process.env.AWS_S3_BUCKET_NAME,
-      Key: key
-    }).promise();
+    // 2) Intentar borrar en Amazon S3
+    try {
+      await S3.deleteObject({
+        Bucket: targetBucket,
+        Key: key
+      }).promise();
+    } catch (s3Error) {
+      // Si AWS falla (por ej: la imagen ya no existe o hay error de permisos),
+      // lo registramos en la consola del backend, pero NO detenemos el proceso 
+      // para que MongoDB sí pueda quitar la URL mala de tu base de datos.
+      console.log("Advertencia de S3 al intentar borrar:", s3Error.message);
+    }
 
-    // 3) Actualiza el documento Mongo: quita esa URL del array images
+    // 3) Actualizar la base de datos de MongoDB
     const updated = await Product.findByIdAndUpdate(
       id,
       { $pull: { images: imageUrl } },
@@ -428,12 +448,12 @@ exports.deleteProductImage = async (req, res) => {
       message: "Imagen eliminada con éxito",
       data: updated
     });
+    
   } catch (err) {
-    console.error('Error al eliminar imagen:', err);
+    console.error('Error crítico al eliminar imagen:', err);
     res.status(500).json({ success: false, error: "Error interno al eliminar la imagen." });
   }
 };
-
 /**
  * GET /api/products/pdp/:slug
  * Devuelve la información unificada del producto optimizada para Marketing (CRO),
