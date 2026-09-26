@@ -43,14 +43,10 @@ router.get('/top-selling', productController.getTopSellingProducts);
 router.get('/least-selling', productController.getLeastSellingProducts);
 
 // =========================================================================
-// RUTA DE MIGRACIÓN ÚNICA (Ejecutar solo una vez en Postman)
-// =========================================================================
-router.post('/utils/migrate-slugs-and-sales', productController.migrateOldProducts);
-// =========================================================================
 // NUEVA RUTA: Endpoint Unificado de Marketing Profesional (PDP)
 // =========================================================================
 router.get('/pdp/:slug', productController.getProductDetailBySlug);
-
+router.post('/utils/migrate-image-urls', productController.migrateImageUrls);
 router.get('/', productController.getProducts);
 router.post('/', upload.array('images', 5), productController.createProduct);
 // Agrega el middleware upload.array('images', 5) para procesar archivos

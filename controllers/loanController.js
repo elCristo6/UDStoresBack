@@ -162,11 +162,13 @@ exports.getAllActiveLoansSummary = async (req, res) => {
         res.json({ success: true, data: formattedLoans });
     } catch (err) { res.status(500).json({ error: err.message }); }
 };
-// REEMPLAZA TU FUNCIÓN finalizeLoanToBill POR ESTA:
+
+// --- FINALIZAR A FACTURA (CON FACTURACIÓN PARCIAL O TOTAL) ---
 exports.finalizeLoanToBill = async (req, res) => {
     try {
         const { loanId } = req.params;
-        const { medioPago, pagaCon } = req.body; 
+        // Recibimos los IDs seleccionados que manda Flutter (selectedItemIds)
+        const { medioPago, pagaCon, selectedItemIds } = req.body; 
         
         const loan = await Loan.findById(loanId).populate('client').populate('items.product');
 
@@ -178,21 +180,32 @@ exports.finalizeLoanToBill = async (req, res) => {
 
         let totalAmount = 0;
         const productsMap = {};
+        
+        // Arreglos para separar la magia parcial
+        const itemsToKeep = [];
+        const itemsToBillRaw = []; // Guarda las líneas originales que sí se van a cobrar para el clon histórico
 
-        // 1. Agrupación inteligente considerando precios modificados
+        // 1. Agrupación inteligente y separación de productos seleccionados
         loan.items.forEach(i => {
             const pendingQty = i.qtyBorrowed - i.qtyReturned;
-            if (pendingQty > 0) {
+            
+            // Verificamos si el front nos envió selectedItemIds y si este ítem está incluido
+            const isSelected = selectedItemIds && selectedItemIds.length > 0 
+                               ? selectedItemIds.includes(i._id.toString()) 
+                               : true; // Fallback: Si no mandan nada, asume cobrar todo
+
+            if (pendingQty > 0 && isSelected) {
+                // Se va a facturar: Lo guardamos crudo para el clon histórico
+                itemsToBillRaw.push(i);
+
                 const pId = i.product._id.toString();
-                
-                // Si customPrice existe y no es null, úsalo. Si no, usa el precio original.
                 const appliedPrice = i.customPrice !== null && i.customPrice !== undefined 
                                      ? i.customPrice 
                                      : (i.product.price || 0);
                                      
                 const originalPrice = i.product.price || 0;
                 
-                // La llave ahora combina el ID y el precio. Así no mezclamos productos con precios distintos.
+                // Agrupamos en el mapa para la factura (NewBill)
                 const groupKey = `${pId}_${appliedPrice}`; 
                 
                 if (productsMap[groupKey]) {
@@ -202,19 +215,23 @@ exports.finalizeLoanToBill = async (req, res) => {
                         product: i.product._id,
                         quantity: pendingQty,
                         appliedPrice: appliedPrice,
-                        originalPrice: originalPrice // Se guarda el original para registro
+                        originalPrice: originalPrice
                     };
                 }
                 totalAmount += (appliedPrice * pendingQty);
+            } else {
+                // No se va a facturar hoy (o ya estaba en pendiente 0): se queda en el préstamo
+                itemsToKeep.push(i);
             }
         });
 
         const itemsToBill = Object.values(productsMap);
 
         if (itemsToBill.length === 0) {
-            return res.status(400).json({ success: false, message: "No hay productos pendientes por facturar." });
+            return res.status(400).json({ success: false, message: "No se seleccionaron productos válidos para facturar." });
         }
 
+        // Validación de stock antes de crear nada
         for (let item of itemsToBill) {
             const product = await Product.findById(item.product);
             if (!product || product.stock < item.quantity) {
@@ -222,7 +239,7 @@ exports.finalizeLoanToBill = async (req, res) => {
             }
         }
 
-        // 2. Crear Factura
+        // 2. Crear Factura Real (NewBill)
         const bill = new NewBill({
             consecutivo,
             user: loan.client._id,
@@ -230,7 +247,7 @@ exports.finalizeLoanToBill = async (req, res) => {
             userPhone: loan.client.phone || 'Sin teléfono',
             userCC: loan.client.cc || 'N/A',
             userDetalles: loan.client.detalles || 'Sin detalles',
-            products: itemsToBill,
+            products: itemsToBill, // Productos agrupados limpios
             totalAmount: Number(totalAmount),
             medioPago: medioPago || 'Efectivo',
             pagaCon: Number(pagaCon) || Number(totalAmount),
@@ -239,18 +256,45 @@ exports.finalizeLoanToBill = async (req, res) => {
 
         await bill.save();
 
+        // 3. Descontar Stock
         for (let item of itemsToBill) {
             await Product.findByIdAndUpdate(item.product, { $inc: { stock: -item.quantity } });
         }
 
-        loan.status = 'closed';
-        await loan.save();
+        // 4. ACTUALIZAR EL PRÉSTAMO (FACTURACIÓN PARCIAL)
+        // Revisamos si en la bolsa de "los que se quedan" aún hay productos con deudas
+        const hasPendingItemsLeft = itemsToKeep.some(i => (i.qtyBorrowed - i.qtyReturned) > 0);
 
-        res.json({ success: true, message: "Factura generada y préstamo cerrado.", data: bill });
+        if (!hasPendingItemsLeft) {
+            // El cliente pagó absolutamente todo el préstamo
+            loan.status = 'closed';
+            await loan.save();
+        } else {
+            // El cliente pagó PARCIALMENTE
+            
+            // A. Creamos un "clon" del préstamo, cerrado, con lo que SÍ facturó 
+            // Esto asegura que la auditoría histórica cuadre perfectamente.
+            const closedLoanCopy = new Loan({
+                client: loan.client._id,
+                items: itemsToBillRaw, 
+                status: 'closed'
+            });
+            await closedLoanCopy.save();
+
+            // B. Actualizamos el préstamo actual original dejando SOLAMENTE los ítems no pagados
+            loan.items = itemsToKeep;
+            await loan.save();
+        }
+
+        res.json({ success: true, message: "Facturación procesada correctamente.", data: bill });
     } catch (err) { 
         res.status(500).json({ success: false, error: err.message }); 
     }
 };
+
+
+
+
 // --- ACTUALIZAR PRECIO DE UNA LÍNEA ESPECÍFICA ---
 exports.updateLoanItemPrice = async (req, res) => {
     try {

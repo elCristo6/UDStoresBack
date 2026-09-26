@@ -552,55 +552,60 @@ exports.getProductDetailBySlug = async (req, res) => {
     res.status(500).json({ success: false, error: "Error interno en el servidor" });
   }
 };
-
 /**
- * POST /api/products/utils/migrate-slugs-and-sales
- * Función de una sola ejecución para actualizar productos antiguos con su slug y ventas acumuladas.
- */// controllers/productController.js
-
-exports.migrateOldProducts = async (req, res) => {
+ * POST /api/products/utils/migrate-image-urls
+ * Función de una sola ejecución para actualizar las URLs de las imágenes 
+ * al nuevo bucket y a la ruta /udelectronics/products/
+ */
+exports.migrateImageUrls = async (req, res) => {
   try {
     const products = await Product.find();
     let updatedCount = 0;
 
-    console.log(`=== Iniciando Remigración Forzada de Slugs Limpios (${products.length} productos) ===`);
+    // Construimos la nueva base de la URL usando tus variables de entorno
+    const bucketName = process.env.AWS_MEDIA_BUCKET_NAME || 'udelectronics-media';
+    const region = process.env.AWS_REGION || 'us-east-1';
+    const newBaseUrl = `https://${bucketName}.s3.${region}.amazonaws.com/udelectronics/products/`;
+
+    console.log(`=== Iniciando Migración de URLs de Imágenes (${products.length} productos) ===`);
 
     for (let product of products) {
-      if (product.name) {
-        // FORZAMOS la limpieza estricta de tildes y eñes directamente aquí
-        product.slug = product.name
-          .toLowerCase()
-          .trim()
-          .normalize('NFD')             // Separa las tildes de las letras
-          .replace(/[\u0300-\u036f]/g, '') // Elimina los acentos desprendidos
-          .replace(/ñ/g, 'n')             // Convierte la ñ en n
-          .replace(/[^\w\s-]/g, '')       // Remueve símbolos extraños
-          .replace(/[\s_-]+/g, '-')       // Cambia espacios por guiones
-          .replace(/^-+|-+$/g, '');       // Quita guiones de los extremos
+      let hasChanges = false;
+
+      if (product.images && product.images.length > 0) {
+        const updatedImages = product.images.map(oldUrl => {
+          // Extraemos el nombre final del archivo (ej. "foto1.png")
+          const urlParts = oldUrl.split('/');
+          const filename = urlParts[urlParts.length - 1];
+
+          // Construimos la nueva URL oficial
+          const newUrl = `${newBaseUrl}${filename}`;
+
+          // Validamos si la URL antigua es diferente a la nueva para evitar escrituras innecesarias
+          if (oldUrl !== newUrl) {
+            hasChanges = true;
+            return newUrl;
+          }
+          
+          return oldUrl;
+        });
+
+        // Si al menos una imagen cambió, guardamos el documento
+        if (hasChanges) {
+          product.images = updatedImages;
+          await product.save();
+          updatedCount++;
+        }
       }
-
-      // Volvemos a calcular/asegurar las ventas totales desde NewBill
-      const salesAggregation = await NewBill.aggregate([
-        { $unwind: '$products' },
-        { $match: { 'products.product': product._id } },
-        { $group: { _id: '$products.product', totalSold: { $sum: '$products.quantity' } } }
-      ]);
-
-      const totalSold = salesAggregation.length > 0 ? salesAggregation[0].totalSold : 0;
-      product.total_sales = totalSold;
-
-      // Al modificar la propiedad .slug directamente en el objeto, Mongoose detectará el cambio y lo guardará
-      await product.save();
-      updatedCount++;
     }
 
     res.status(200).json({
       success: true,
-      message: `¡Remigración completada! Se limpiaron los acentos, tildes y eñes de ${updatedCount} productos.`
+      message: `¡Migración de URLs completada! Se actualizaron las imágenes de ${updatedCount} productos.`
     });
 
   } catch (error) {
-    console.error('Error durante la remigración forzada:', error);
-    res.status(500).json({ success: false, error: error.message });
+    console.error('Error durante la migración de imágenes:', error);
+    res.status(500).json({ success: false, error: 'Error interno durante la migración de URLs' });
   }
 };
